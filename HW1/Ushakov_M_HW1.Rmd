@@ -1,10 +1,210 @@
-# # Homework 1 ############################
-#
-# 1. Make EDA for data (5 points).
-# 2. Build an ordination of objects (descriptions, samples, etc.) (5 points).
-# 3. Visualise the relationship between the resulting ordination and environmental parameters (5 points).
-# 4. Draw conclusions about the most important factors (5 points).
-#
-# #*Data sources**
-# 
-# Trees on Barro Colorado (data from Condit et al. (2002), `BCI' data, `vegan' package).
+---
+title: 'Applied Statistics: HW1'
+author: "Mikhail Ushakov"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(vegan)
+library(psych)
+library(reshape2)
+library(ggrepel)
+library(ggsci)
+```
+
+
+# 1 EDA
+
+## Load data
+
+```{r}
+data("BCI")
+data("BCI.env")
+```
+
+## Explore species counts
+
+NAs
+
+```{r}
+sum(is.na(BCI))
+```
+The data consists of 50 rows representing 1 hectare plot and 225 columns with tree species counts on this plot.
+
+Summary statistics of species counts for each plot
+
+```{r}
+describe(t(BCI))
+```
+
+Make long df for convenience
+
+
+```{r}
+df <- cbind(plot = rownames(BCI), BCI)
+df_long <- melt(df, id.vars = c("plot"), variable.name = "species", value.name = "counts")
+```
+
+Plot tree counts distribution
+
+```{r}
+rowSums(BCI) %>%  hist(xlab = "Plot trees counts", main = "Plot trees counts distribution")
+```
+
+Top 5 most abundant species by median
+
+```{r}
+df_long %>% 
+  group_by(species) %>% 
+  summarise(Mean = mean(counts), Median = median(counts)) %>% 
+  arrange(desc(Median)) %>% 
+  top_n(5)
+```
+
+
+```{r}
+df_long %>% 
+  group_by(plot) %>% 
+  filter(counts > 0) %>% 
+  count() %>% 
+  pull(n) %>% 
+  hist(
+    main='Number of unique species distribution',
+    xlab='Number of unique species',
+    ylab='Number of plots'
+    )
+```
+
+## Explore plot environmental variables
+
+NAs
+
+```{r}
+sum(is.na(BCI.env))
+```
+
+```{r}
+head(BCI.env)
+```
+
+The second dataset contains 0 variables describing each plot from the first dataset
+
+```{r}
+str(BCI.env)
+```
+
+There are two variables with information about location of plots.
+Also there is an information about elevation and precipitation, but it is equal for all plots.
+Age.cat contains info about forest age category, but despite it has 2 factors, there is only one plot with "c3" level.
+"Geology" factory has only 1 level.
+
+Thus, the only useful varaibles are Habitat, Stream and EnvHet.
+
+
+```{r}
+BCI.env %>% as.data.frame() %>% group_by(Habitat) %>% count()
+```
+```{r}
+BCI.env %>% as.data.frame() %>% group_by(Stream) %>% count()
+```
+
+# Ordination
+
+## Calculate Bray-Curtis distances between plots
+
+```{r}
+dist <- vegdist(BCI, method = "bray")
+```
+
+## Scree plot
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+NMDS.scree <- function(x) { #where x is the name of the data frame variable
+  plot(rep(1, 10), replicate(10, metaMDS(x, autotransform = F, k = 1, trace = FALSE)$stress), xlim = c(1, 10),ylim = c(0, 0.30), xlab = "# of Dimensions", ylab = "Stress", main = "NMDS stress plot")
+  for (i in 1:10) {
+    points(rep(i + 1,10),replicate(10, metaMDS(x, autotransform = F, k = i + 1, trace = FALSE)$stress))
+  }
+}
+NMDS.scree(dist)
+```
+
+
+There is no good reflection point, so let's take the number of dimensions of 2
+
+## NMDS
+
+```{r message=FALSE, warning=FALSE, echo=FALSE}
+set.seed(7)
+
+NMDS2 <- metaMDS(BCI, k = 2, trymax=100, trace = F, autotransform = F, distance="bray")
+
+```
+
+## Simple ordination plot
+
+```{r}
+ordiplot(NMDS2, display = "sites", type="t", cex=0.7)
+```
+
+```{r}
+ef <- envfit(NMDS2, BCI, permu = 999)
+plot(NMDS2, type="t", display="sites")
+plot(ef, p.max = 0.001, cex=0.5)
+```
+
+## Ordination plot with variables
+
+```{r}
+plot(NMDS2, type="n")
+points(NMDS2, display="sites", pch = c(1, 2, 3, 4, 5) [as.numeric(BCI.env$Habitat)],col = c("black", "red") [as.numeric(BCI.env$Stream)])
+legend(
+  "topright",
+  legend = c(levels(BCI.env$Habitat)),
+  pch = c(1, 2, 3 ,4 ,5),
+  title = "Habitat"
+)
+
+legend(
+  "topleft",
+  legend = c(levels(BCI.env$Stream)),
+  pch = 1,
+  title = "Stream",
+  col = c("black", "red")
+)
+
+legend(
+  "bottomleft",
+  paste0("stress = ",round(NMDS2$stress, 3), cex = 1)
+)
+```
+
+Hard to say that plots are well separated by "Habitat", but it denitiely discriminates some groups.
+Seems that OldLow forests can have diversity similar to swamps and OldSlope forests. The second explanation is that it is the most abundant type in the dataset.
+
+
+```{r}
+mds_env <- data.frame(NMDS2$points)
+mds_env$habitat <- as.factor(BCI.env$Habitat)
+mds_env$envhet <- BCI.env$EnvHet
+mds_env$envhet_size <- mds_env$envhet
+mds_env$plot <- rownames(mds_env)
+```
+
+```{r}
+mds_env %>% 
+  ggplot(aes(MDS1, MDS2, label = plot, col = habitat)) +
+  geom_text_repel(show.legend = F) +
+  geom_point(aes(size = envhet)) + 
+  scale_color_startrek() +
+  theme_classic()
+```
+
+The same but more accurate picture we get with ggplot, showing now also heterogenity.
+We see that OldHigh and OldLow forests have big difference in heterogeneity and don't see it in OldSlope forests. Young forests and Swamps have big heterogeneity.
