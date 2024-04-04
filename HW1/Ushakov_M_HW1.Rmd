@@ -1,0 +1,10 @@
+# # Homework 1 ############################
+#
+# 1. Make EDA for data (5 points).
+# 2. Build an ordination of objects (descriptions, samples, etc.) (5 points).
+# 3. Visualise the relationship between the resulting ordination and environmental parameters (5 points).
+# 4. Draw conclusions about the most important factors (5 points).
+#
+# #*Data sources**
+# 
+# Trees on Barro Colorado (data from Condit et al. (2002), `BCI' data, `vegan' package).
