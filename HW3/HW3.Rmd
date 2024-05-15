@@ -1,0 +1,154 @@
+---
+title: 'Applied Statistics: HW3'
+author: "Mikhail Ushakov"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(readxl)
+library(vegan)
+library(ggplot2)
+library(dplyr)
+```
+
+
+# Load and preprocess data
+
+```{r message=FALSE, warning=FALSE}
+df <- read_excel('Sleepy lizard.xlsx')
+df <- df %>% select(
+  Tot_WBC,
+  Het_ABS,
+  Lym_ABS,
+  'H:L Ratio',
+  Mon_ABS,
+  OthG_ABS,
+  LBSI,
+  Treatment,
+  Habitat,
+  Connectivity
+)
+df$Treatment <-  as.factor(df$Treatment)
+df$Habitat <- as.factor(df$Habitat)
+df$Connectivity <-  as.factor(df$Connectivity)
+```
+
+Data frame with only numeric variables
+
+
+```{r message=FALSE, warning=FALSE}
+df_num <- df %>% select(-c(Treatment, Connectivity, Habitat))
+```
+
+# Normalization
+
+```{r message=FALSE, warning=FALSE}
+boxplot(df_num)
+```
+
+Let's perform centering with log-normalization
+
+```{r message=FALSE, warning=FALSE}
+
+df_norm <- log(df_num + 1)
+center <- function(x){
+  x - mean(x, na.rm = TRUE)
+}
+
+df_cent <- t(apply(df_norm, 1, center))
+
+df_norm <- apply(t(df_cent), 1, center)
+```
+
+```{r message=FALSE, warning=FALSE}
+boxplot(df_norm)
+```
+
+# PCA
+
+```{r}
+pca <- prcomp(df_norm)
+pca_df <- df %>% select(Treatment, Habitat)
+pca_df <- cbind(pca_df, pca$x[, 1:2])
+```
+
+```{r message=FALSE, warning=FALSE}
+pca_df %>% 
+  ggplot(aes(PC1, PC2, col=Habitat, shape=Treatment)) +
+    geom_point()
+```
+
+# Analysis
+
+## Check dispersion
+
+Let's check equal dispersion in groups before using PERMANOVA
+
+```{r message=FALSE, warning=FALSE}
+dist <- vegdist(df_norm, method  = "euclidean")
+PCO <- betadisper(dist, df$Treatment)
+plot(PCO)
+anova(PCO)
+```
+
+```{r}
+PCO <- betadisper(dist, df$Connectivity)
+plot(PCO)
+anova(PCO)
+```
+
+```{r}
+PCO <- betadisper(dist, df$Habitat)
+plot(PCO)
+anova(PCO)
+```
+
+Seems that there is no significant difference in those groups, although Habitat groups look not very nice
+
+
+
+## Task 1 
+
+### Blood composition and different landscapes
+
+### Different landscapes
+
+```{r}
+adonis2(df_norm ~df$Treatment, method='euclidian')
+```
+
+### Habitats from highly modified landscapes
+
+```{r}
+df_hab <- df_norm[df$Treatment == 2, ]
+hab <- df %>% filter(Treatment == 2)
+adonis2(df_hab ~ hab$Habitat, method='euclidian')
+```
+
+### Degree of connectivity
+
+```{r}
+adonis2(df_hab ~ hab$Connectivity, method = "canberra")
+
+```
+## Task 2
+
+```{r}
+adonis2(df_hab ~ hab$Habitat + hab$Connectivity, method = "euclidean")
+```
+
+# Conclusion
+
+Task 1 results show that:
+
+a. There is a significant difference in blood composition between lizards from different landscapes.
+b. Blood composition doesn't differ between lizards from different habitats in highly modified landscapes. 
+c. Degree of connectivity doesn't affect the blood composition of lizards from highly modified landscape.
+
+Task 2 results show that there is no evidence to suggest that there is a difference between different combinations of Habitats and Connectivity variables levels.
+

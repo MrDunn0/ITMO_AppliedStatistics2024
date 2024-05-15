@@ -1,0 +1,147 @@
+---
+title: 'Applied Statistics: HW2'
+author: "Mikhail Ushakov"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(vegan)
+library(gridExtra)
+library(ape)
+library(dendextend)
+library(pvclust)
+library(tidyr)
+```
+
+# Load data
+
+```{r message=FALSE, warning=FALSE}
+
+require(golubEsets)
+data(Golub_Merge)
+golub <- data.frame(Golub_Merge)[1:7129]
+```
+
+
+```{r}
+rownames(golub) <- paste(rownames(golub), Golub_Merge$ALL.AML, Golub_Merge$BM.PB, Golub_Merge$T.B.cell, sep = '_')
+```
+
+# Calculate distances
+
+There are negative values in the data, therefore I chose distances that can handle such values.
+
+```{r}
+data_log <- decostand(golub, method = "log", MARGIN = 2)
+
+dist_euc <-  vegdist(data_log, method = "euclidean")
+dist_canberra <- vegdist(data_log, method = "canberra")
+dist_manhattan <- vegdist(data_log, method = "manhattan")
+
+distances <- list(
+  Euclidean = dist_euc,
+  Canberra= dist_canberra,
+  Manhattan = dist_manhattan
+)
+
+```
+
+# Clustering methods comparison
+
+```{r}
+compare_clustering_methods <- function(distances, methods) {
+  corr_df <- data.frame(
+    Method = character(0),
+    Distance = character(0),
+    Corr = numeric(0)
+  )
+  
+  for  (method in methods){
+    for (dist_name in names(distances)){
+      d <- distances[[dist_name]]
+      hs <- hclust(d, method = method)
+      cophenetic_matrix <- cophenetic(hs)
+      correlation <- cor(d, as.dist(cophenetic_matrix))
+      corr_df <- rbind(corr_df, data_frame(
+        Method = method,
+        Distance = dist_name,
+        Correlation = correlation
+      ))
+    }
+    
+  }
+  return(corr_df)
+}
+```
+
+
+```{r message=FALSE, warning=FALSE}
+methods = c('single', 'complete', 'average', 'ward.D2')
+comparison_results <- spread(compare_clustering_methods(distances, methods), Distance, Correlation)
+
+comparison_results[['Mean']] <- rowMeans(comparison_results[, 2:4])
+comparison_results
+```
+
+```{r}
+colMeans(comparison_results[, 2:4])
+```
+
+Best methods in this comparison are UPGMA (average) and nearest neighbor method (single).
+
+# Bootstrap
+
+## UPGMA + Canberra distance
+
+```{r}
+
+cl_boot <- pvclust(
+  t(data_log),
+  method.hclust = 'average',
+  nboot = 100,
+  method.dist = 'canberra',
+  parallel = T,
+  iseed = 32282)
+
+```
+
+```{r, fig.width=10, fig.height=6}
+
+plot(cl_boot, cex = 0.7)
+```
+
+Canberra distance was chosen because Manhattan was not informative.
+
+## Nearest neighbor + Canberra distance
+
+```{r}
+
+cl_boot <- pvclust(
+  t(data_log),
+  method.hclust = 'single',
+  nboot = 100,
+  method.dist = 'canberra',
+  parallel = T,
+  iseed = 32282)
+
+```
+
+```{r, fig.width=10, fig.height=6}
+
+plot(cl_boot, cex = 0.7)
+```
+
+# Conclusions
+
+Among two best clustering methods UPGMA provides better results while Nearest neighbor method dendrogram is completely meaningless.
+
+Generally, dendrograms seem to be not very informative and there are not many meaningful and well-resolved clusters. We see one little AML cluster, larger cluster of ALL with two distinguishable clusters of B-Cells and T-cells. It is not clear what is the reason of such a bad clustering results. Perhaps another normalization method should be chosen or wider range of metrics and clustering methods should be tested.
+
+

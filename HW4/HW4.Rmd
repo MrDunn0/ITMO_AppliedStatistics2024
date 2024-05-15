@@ -1,0 +1,74 @@
+---
+title: 'Applied Statistics: HW4'
+author: "Mikhail Ushakov"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# You have been provided with data to assess the effects of grazing on the zoobenthos of rivers on the island of Tasmania. You need to identify which external factors have the greatest influence on cha
+
+```{r}
+library(readxl)
+library(vegan)
+library(ggplot2)
+library(dplyr)
+library(ggvegan)
+```
+
+nges in the composition of flora and fauna
+
+
+# Read data
+
+```{r}
+fauna <- read_excel('Grazing_Magierowski_et_al_2015.xls', sheet = 'fauna')
+env <- read_excel('Grazing_Magierowski_et_al_2015.xls', sheet = 'env')
+coord <- read_excel('Grazing_Magierowski_et_al_2015.xls', sheet = 'coord')
+raw <- read_excel('Grazing_Magierowski_et_al_2015.xls', sheet = 'raw', skip=1)
+```
+
+```{r}
+combined_df <- cbind(env, fauna[, 2:ncol(fauna)])
+combined_numeric <- select_if(combined_df, is.numeric)
+combined_imp <- combined_numeric %>% mutate_all(~if_else(is.na(.), mean(., na.rm=T), .))
+```
+
+
+# CCA
+
+```{r}
+cca <- cca(combined_imp ~., data=combined_imp, scale=T)
+summary(cca)
+```
+
+
+
+```{r}
+screeplot(cca,  bstick = TRUE)
+```
+
+```{r fig.width=10, fig.height=6}
+plot(cca)
+```
+```{r fig.width=10, fig.height=6}
+autoplot(cca, scaling = "sites")
+```
+
+# MDS
+
+
+```{r}
+mds <- metaMDS(combined_imp)
+plot(mds, display = 'sites')
+```
+
+# Conclusions
+
+Not great not terrible
+
+¯_(ツ)/¯
+
